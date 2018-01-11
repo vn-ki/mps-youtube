@@ -16,6 +16,46 @@ not_utf8_environment = mswin or "UTF-8" not in sys.stdout.encoding
 
 
 class mpv(Player):
+    socket = None
+    fifo = None
+
+    def play_pause(self):
+        self._sendcommand(["cycle", "pause"])
+
+    def _sendcommand(self, command):
+        """
+            sends commands to binded player
+        """
+        if self.sockpath and not self.socket:
+            self.socket = socket.socket(socket.AF_UNIX)
+            # wait on socket initialization
+            tries = 0
+            while tries < 10:
+                time.sleep(.5)
+                try:
+                    self.socket.connect(self.sockpath)
+                    break
+                except socket.error:
+                    pass
+                tries += 1
+            else:
+                return
+
+        if self.socket:
+            self.socket.send(json.dumps({"command": command}).encode() + b'\n')
+
+        elif self.fifo:
+            command = command[:]
+            for x, i in enumerate(command):
+                if i is True:
+                    command[x] = 'yes' if self.mpv else 1
+                elif i is False:
+                    command[x] = 'no' if self.mpv else 0
+
+            cmd = " ".join([str(i) for i in command]) + '\n'
+            self.fifo.write(cmd)
+            self.fifo.flush()
+
     def _generate_real_playerargs(self, song, override, stream, isvideo, softrepeat):
         """ Generate args for player command.
 
@@ -93,13 +133,13 @@ class mpv(Player):
         cmd.append('--input-conf=' + self.input_file)
         self.sockpath = None
         self.fifopath = None
-
+        self.p = None
         if g.mpv_usesock:
             self.sockpath = tempfile.mktemp('.sock', 'mpsyt-mpv')
             cmd.append(g.mpv_usesock + '=' + self.sockpath)
 
             with open(os.devnull, "w") as devnull:
-                self.p = subprocess.Popen(cmd, shell=False, stderr=devnull)
+                self.p = subprocess.Popen(cmd, shell=False, stderr=devnull, stdin=devnull)
 
             if g.mprisctl:
                 g.mprisctl.send(('socket', self.sockpath))
@@ -109,14 +149,22 @@ class mpv(Player):
                 os.mkfifo(self.fifopath)
                 cmd.append('--input-file=' + self.fifopath)
                 g.mprisctl.send(('mpv-fifo', self.fifopath))
-
             self.p = subprocess.Popen(cmd, shell=False, stderr=subprocess.PIPE,
-                                      bufsize=1)
+                                      bufsize=1, stdin=subprocess.PIPE)
 
-        self._player_status(songdata + "; ", song.length)
+        self.prefix = songdata + "; "
+        self.songlength = song.length
+        try:
+            self.p.stderr.flush()
+        except AttributeError:
+            pass
+        #self._player_status(songdata + "; ", song.length)
         returncode = self.p.wait()
 
-        if returncode == 42:
+        if returncode == 4:
+            return
+
+        elif returncode == 42:
             self.previous()
 
         elif returncode == 43:
@@ -125,7 +173,8 @@ class mpv(Player):
         else:
             self.next()
 
-    def _player_status(self, prefix, songlength=0):
+
+    def _player_status(self):
         """ Capture time progress from player output. Write status line. """
         # pylint: disable=R0914, R0912
         re_player = re.compile(r".{,15}AV?:\s*(\d\d):(\d\d):(\d\d)")
@@ -175,7 +224,7 @@ class mpv(Player):
                     if(volume_level and volume_level != g.volume):
                         g.volume = volume_level
                     if elapsed_s:
-                        line = self._make_status_line(elapsed_s, prefix, songlength,
+                        line = self._make_status_line(elapsed_s, self.prefix, self.songlength,
                                                       volume=volume_level)
 
                         if line != last_displayed_line:
@@ -218,8 +267,8 @@ class mpv(Player):
 
                         if volume_level and volume_level != g.volume:
                             g.volume = volume_level
-                        line = self._make_status_line(elapsed_s, prefix,
-                                                      songlength,
+                        line = self._make_status_line(elapsed_s, self.prefix,
+                                                      self.songlength,
                                                       volume=volume_level)
 
                         if line != last_displayed_line:

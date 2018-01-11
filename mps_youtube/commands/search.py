@@ -279,9 +279,14 @@ def livestream_category_search(term):
             g.message = "Player not configured! Enter %sset player <player_app> "\
                         "%s to set a player" % (c.g, c.w)
             return
-        else:
+        elif not g.PLAYER_OBJ:
             util.assign_player(config.PLAYER.get)
-        g.PLAYER_OBJ.play(songlist, shuffle, repeat, override)
+        g.PLAYER_OBJ.stop()
+        def open_player():
+            g.PLAYER_OBJ.play(songlist, shuffle, repeat, override)
+        t = threading.Thread(target=open_player)
+        t.setDaemon(True)
+        t.start()
 
     g.content = listview.ListView(columns, query_obj, start_stream)
     g.message = "Livestreams in category: '%s'" % term

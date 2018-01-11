@@ -2,11 +2,13 @@ import sys
 import webbrowser
 import random
 from urllib.error import HTTPError, URLError
+from time import sleep
 
 from .. import g, c, streams, util, content, config
 from . import command, WORD, RS
 from .songlist import plist
 from .search import yt_url, related
+import threading
 
 
 @command(r'play\s+(%s|\d+)' % WORD)
@@ -96,19 +98,28 @@ def play(pre, choice, post=""):
                 g.message = "Player not configured! Enter %sset player <player_app> "\
                             "%s to set a player" % (c.g, c.w)
                 return
-            else:
+            elif not g.PLAYER_OBJ:
                 util.assign_player(config.PLAYER.get)
-            g.PLAYER_OBJ.play(songlist, shuffle, repeat, override)
+            #g.PLAYER_OBJ.stop()
+            #sleep(2)    # wait for exit and clean up
+            def open_player():
+                g.PLAYER_OBJ.play(songlist, shuffle, repeat, override)
+            t = threading.Thread(target=open_player)
+            t.setDaemon(True)
+            t.start()
+
+            #g.PLAYER_OBJ.play(songlist, shuffle, repeat, override)
 
         except KeyboardInterrupt:
             return
         finally:
             g.content = content.generate_songlist_display()
-
+            pass
+        '''
         if config.AUTOPLAY.get:
             related(selection.pop())
             play(pre, str(random.randint(1, 15)), post="")
-
+        '''
 
 @command(r'(%s{0,3})(?:\*|all)\s*(%s{0,3})' %
         (RS, RS))
@@ -159,3 +170,7 @@ def browser_play(number):
         g.message = c.r + str(e) + c.w
         g.content = g.content or content.generate_songlist_display()
         return
+
+@command(r'player')
+def player():
+    util.show_player()

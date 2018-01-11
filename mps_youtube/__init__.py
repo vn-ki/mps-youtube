@@ -5,5 +5,7 @@ __license__ = "GPLv3"
 __url__ = "https://github.com/mps-youtube/mps-youtube"
 
 from . import init
+
 init.init()
+
 from . import main

@@ -50,6 +50,8 @@ class Player(metaclass=ABCMeta):
 
     def play(self, songlist, shuffle=False, repeat=False, override=False):
         """ Play a range of songs, exit cleanly on keyboard interrupt. """
+        self.stop()
+        time.sleep(2)
         self.songlist = songlist
         self.shuffle = shuffle
         self.repeat = repeat
@@ -60,8 +62,8 @@ class Player(metaclass=ABCMeta):
         self.song_no = 0
         while 0 <= self.song_no <= len(self.songlist)-1:
             song = self.songlist[self.song_no]
-            g.content = self._playback_progress(self.song_no, self.songlist,
-                                                repeat=repeat)
+            #g.content = self._playback_progress(self.song_no, self.songlist,
+            #                                    repeat=repeat)
 
             if not g.command_line:
                 screen.update(fill_blank=False)
@@ -79,7 +81,6 @@ class Player(metaclass=ABCMeta):
 
             try:
                 video, stream = stream_details(song, override=self.override, softrepeat=softrepeat)
-                self._UPDATED = True
                 self._playsong(song, stream, video,
                                override=self.override, softrepeat=softrepeat)
 
@@ -111,8 +112,11 @@ class Player(metaclass=ABCMeta):
         self.song_no -= 1
 
     def stop(self):
-        self.terminate_process()
-        self.song_no = len(self.songlist)
+        try:
+            self.terminate_process()
+            self.song_no = len(self.songlist)
+        except AttributeError:
+            pass
 
     def seek(self):
         pass
@@ -145,11 +149,11 @@ class Player(metaclass=ABCMeta):
         size = streams.get_size(song.ytid, stream['url'])
         songdata = (song.ytid, stream['ext'] + " " + stream['quality'],
                     int(size / (1024 ** 2)))
-        songdata = "%s; %s; %s Mb" % songdata
-        screen.writestatus(songdata)
+        self.songdata = "%s; %s; %s Mb" % songdata
+        #screen.writestatus(self.songdata)
 
         cmd = self._generate_real_playerargs(song, override, stream, video, softrepeat)
-        returncode = self._launch_player(song, songdata, cmd)
+        returncode = self._launch_player(song, self.songdata, cmd)
         failed = returncode not in (0, 42, 43)
 
         '''
@@ -196,6 +200,7 @@ class Player(metaclass=ABCMeta):
             return None
 
         finally:
+
             if g.mprisctl:
                 g.mprisctl.send(('stop', True))
 

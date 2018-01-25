@@ -535,7 +535,7 @@ def _get_metadata_from_lastfm(artist, track):
 
 def assign_player(player):
     try:
-        module = import_module('.{0}'.format(player), 'mps_youtube.players')
+        module = import_module('mps_youtube.players.{0}'.format(player))
         pl = getattr(module, player)
         g.PLAYER_OBJ = pl()
 
